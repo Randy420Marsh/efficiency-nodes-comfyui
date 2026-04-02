@@ -1,2 +1,2 @@
-clip-interrogator
-simpleeval
+clip-interrogator==0.6.0
+simpleeval==1.0.3
