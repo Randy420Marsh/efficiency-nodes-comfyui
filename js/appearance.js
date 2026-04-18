@@ -76,13 +76,66 @@ function setNodeColors(node, theme) {
 const ext = {
     name: "efficiency.appearance",
 
+    async beforeRegisterNodeDef(nodeType, nodeData, app) {
+        const nodesToFix = ["Efficient Loader", "Eff. Loader SDXL"];
+        
+        if (nodesToFix.includes(nodeData.name)) {
+            const origComputeSize = nodeType.prototype.computeSize;
+
+            nodeType.prototype.computeSize = function (out) {
+                // 1. Get base size
+                let size = origComputeSize ? origComputeSize.apply(this, arguments) : [200, 100];
+                
+                // CRITICAL SAFETY FIX: Prevent crash if LiteGraph checks size before widgets exist
+                if (!this.widgets || this.widgets.length === 0) {
+                    return size;
+                }
+
+                // 2. Start stacking widgets below the node title
+                let current_y = LiteGraph.NODE_TITLE_HEIGHT || 30;
+
+                // 3. Iterate and set proper Y-coordinates
+                for (let i = 0; i < this.widgets.length; ++i) {
+                    let w = this.widgets[i];
+                    
+                    w.y = current_y; 
+                    
+                    let widget_height = LiteGraph.NODE_WIDGET_HEIGHT || 20;
+
+                    // HTML Textbox check
+                    if (w.type === "customtext" && w.inputEl) {
+                        widget_height = w.inputEl.offsetHeight || w.inputEl.scrollHeight || 60;
+                    } 
+                    // Safely execute widgethider overrides with a try/catch
+                    else if (w.computeSize) {
+                        try {
+                            // Pass the node width so standard ComfyUI widgets don't crash
+                            let ws = w.computeSize(size[0]); 
+                            if (ws && ws[1] !== undefined) {
+                                widget_height = ws[1];
+                            }
+                        } catch(e) {
+                            // If a custom widget fails its compute size, fallback to default height
+                        }
+                    }
+
+                    // Push next widget down
+                    current_y += widget_height + 4; 
+                }
+                
+                // 4. Wrap node bounds with a little padding at the bottom
+                size[1] = Math.max(size[1], current_y + 10);
+                return size;
+            };
+        }
+    },
+
     nodeCreated(node) {
         const nclass = node.comfyClass;
         if (NODE_COLORS.hasOwnProperty(nclass)) {
             let colorKey = NODE_COLORS[nclass];
 
             if (colorKey === "random") {
-                // Check for a valid color key before popping
                 if (colorKeys.length === 0 || !COLOR_THEMES[colorKeys[colorKeys.length - 1]]) {
                     colorKeys = Object.keys(COLOR_THEMES).filter(key => key !== "none");
                     shuffleArray(colorKeys);
